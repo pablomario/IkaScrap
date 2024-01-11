@@ -2,6 +2,7 @@
 import random
 
 import requests
+import os
 from bs4 import BeautifulSoup
 import urllib.request
 import urllib.error
@@ -10,6 +11,7 @@ import time
 import base64
 from datetime import datetime
 from colorama import Back, Style
+from urllib.parse import urlparse, parse_qs
 
 # PAYRE2FB TARGET
 TARGET = "http://papyrefb53cki34wumjh2yokayxiunzmmrabpxvinfjauwm5az25snid.tor2web.it/onion_2/index.php?ax=1"
@@ -28,14 +30,14 @@ def main(dataGrid_page: int):
             'dataGrid_page': dataGrid_page,
             'dataGrid_sortfield': 'anyo',
             'dataGrid_sortdirection': 'desc',
-            'dataGrid_recordsOnPage': 65,
+            'dataGrid_recordsOnPage': 50,
         }
 
         # Scrapping with Pages
         request_response = requests.post(TARGET,  data=payload, headers={'User-Agent': getRandomUserAgent()})
 
         # Latest books publishing
-        # request_response = requests.post(TARGET, headers={'User-Agent': getRandomUserAgent()})
+        #request_response = requests.post(TARGET, headers={'User-Agent': getRandomUserAgent()})
 
         if request_response.status_code == 200:
             html_content = request_response.text
@@ -83,12 +85,14 @@ def main(dataGrid_page: int):
                     break
             ref_mobi = None
             ref_download = None
+            ref_binary = None
             if button_element:
                 ref_mobi = button_element.get('href')
                 ref_mobi = ref_mobi.replace("./", "/")
                 ref_mobi = DOMAIN + ref_mobi
                 ref_mobi = getMobiUrl(ref_mobi)
-                ref_download = getMobiId(ref_mobi)
+                ref_download = extractUrlDownloadEbook(getMobiId(ref_mobi))
+                ref_binary = getBookBinary(ref_download)
 
             papyro_book = {
                 'book': book_title,
@@ -100,6 +104,7 @@ def main(dataGrid_page: int):
                 'ref_download': ref_download,
                 'cover_reference': '',
                 'saved_date': datetime.now(),
+                'ref_binary': ref_binary,
             }
 
             print('--- BOOK DATA -----------------------------------------------')
@@ -135,6 +140,13 @@ def getMobiId(url):
     return book_id
 
 
+def extractUrlDownloadEbook(url):
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    url_param_value = query_params.get('url', [])[0]
+    return url_param_value
+
+
 def getBookImage(cover_url):
     cover_url = cover_url.replace("/ficha2.php?a=", "/ficha/includes/")
     cover_url = cover_url.replace("&aws=", ".jpg")
@@ -150,32 +162,47 @@ def getBookImage(cover_url):
 
 
 def saveBook(book, book_cover):
-    client = pymongo.MongoClient("localhost:27017")
-    database = client["ikawe"]
-    collection = database["books"]
-    collection_covers = database["books_cover"]
 
-    existing_book = collection.find_one({"book": book["book"]})
-
-    if existing_book:
-        if existing_book["ref_download"] == book["ref_download"]:
-            print("El libro ya existe y el campo 'url_download' es el mismo.")
+    if book["ref_binary"] != "":
+        client = pymongo.MongoClient("localhost:27017")
+        database = client["ikawe"]
+        collection = database["books"]
+        collection_covers = database["books_cover"]
+        existing_book = collection.find_one({"book": book["book"]})
+        if existing_book:
+            if existing_book["ref_download"] == book["ref_download"]:
+                print("El libro ya existe y el campo 'url_download' es el mismo.")
+            else:
+                result = collection.update_one(
+                    {"book": book["book"]},
+                    {"$set": {"ref_download": book["ref_download"]}}
+                )
+                print("El libro ya existe pero el campo 'ref_download' fue actualizado:", result.modified_count,
+                      "actualizaciones.")
         else:
-            result = collection.update_one(
-                {"book": book["book"]},
-                {"$set": {"ref_download": book["ref_download"]}}
-            )
-            print("El libro ya existe pero el campo 'ref_download' fue actualizado:", result.modified_count,
-                  "actualizaciones.")
+            result_cover = collection_covers.insert_one(book_cover)
+            print(f"Inserted Coover Book with ID: {result_cover.inserted_id}")
+            book["cover_reference"] = result_cover.inserted_id
+            result = collection.insert_one(book)
+            print(f"Inserted Book: {book['book']} with ID {result.inserted_id}")
+        client.close()
     else:
-        result_cover = collection_covers.insert_one(book_cover)
-        print(f"Inserted Coover Book with ID: {result_cover.inserted_id}")
+        print(f'ERROR - Not boook downloaded')
 
-        book["cover_reference"] = result_cover.inserted_id
-        result = collection.insert_one(book)
-        print(f"Inserted Book: {book['book']} with ID {result.inserted_id}")
 
-    client.close()
+def getBookBinary(book_uri):
+    print(f'Start downloading: {book_uri}')
+    book_name = book_uri.split("/")[-1]
+    response = requests.get(book_uri)
+    if response.status_code == 200:
+        ruta_archivo = os.path.join("../IkaWeb/static/ebooks/", book_name)
+        with open(ruta_archivo, 'wb') as archivo_local:
+            archivo_local.write(response.content)
+        print(f'eBook has been download in:  {ruta_archivo}')
+        return book_name
+    else:
+        print(f'Error to download ebook from: {book_uri} - Status Code: {response.status_code}')
+        return ""
 
 
 # -------------------------  FUNCIONES DE REFUERZO ---------------------
@@ -204,7 +231,7 @@ def customPrint(key, value):
     print(Back.GREEN + key + Style.RESET_ALL, value)
 
 
-# Ultimo Pagina 64, Libro 21
-for page in range(64, 75):
+# Ultimo Pagina 1, Libro 21
+for page in range(1, 3):
     print('Init Scraping Page: ', page)
     main(page)
