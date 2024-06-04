@@ -23,7 +23,7 @@ MONGODB_DB = "ikawe"
 MONGODB_BOOK_DB = "books"
 MONGODB_COVERS_DB = "books_cover"
 
-# ORIGIN-DNS = "http://9fx.us/papyrefb2_1"
+# ORIGIN-DNS = "http://9fx.us/papyrefb2_1  "
 DOMAIN = "http://papyrefb53cki34wumjh2yokayxiunzmmrabpxvinfjauwm5az25snid.tor2web.it"
 TARGET = "http://papyrefb53cki34wumjh2yokayxiunzmmrabpxvinfjauwm5az25snid.tor2web.it/onion_2/index.php?rn=12339"
 SPAM_ASHNK = "https://ashnk.com/OTQwMDY=/"
@@ -112,7 +112,6 @@ def scrapper(html_content: str):
                 book_gender = td_elements[3].get_text()
                 book_theme = td_elements[4].get_text()
                 ref_link = td_elements[1].get('onclick')
-                print(f'LINK ? -> {ref_link}')
 
                 ref_link = ref_link.replace("javascript:document.location.href='..", "")
                 ref_link = ref_link.replace("'", "")
@@ -187,13 +186,10 @@ def getMobiId(url):
 
 
 def extractUrlDownloadEbook(url):
-    print(f'extractUrlDownloadEbook URL->{url}')
-    return url
-    # -- Workaround que en algun momento debió ser util
-    # parsed_url = urlparse(url)
-    # query_params = parse_qs(parsed_url.query)
-    # url_param_value = query_params.get('url', [])[0]
-    # return url_param_value
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    url_param_value = query_params.get('url', [])[0]
+    return url_param_value
 
 
 def getBookImage(cover_url):
